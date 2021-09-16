@@ -1,0 +1,1 @@
+This is a simple socket programming demo. The goal is to write two programs that can communicate with each other using TCP/IP sockets. The readme file contains whatever I learnt (re-learnt) while doing this.
