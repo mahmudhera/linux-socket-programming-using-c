@@ -13,6 +13,7 @@
 
 ucontext_t uctx_func, uctx_server, uctx_client, uctx_main;
 char * remote_hostname;
+void * initial_func_stack;
 
 void error(const char *msg)
 {
@@ -84,6 +85,7 @@ void server_function(void)
 	// read uctx from client
 	n = read(newsockfd, &uctx_func_received, sizeof(uctx_func_received));
 	// TODO: what to do with this context now??
+	// TODO: is this even the correct context? match the contents!!
 	
 	if (n < 0) error("ERROR reading from socket");
 	printf("Here is the message: BLANK\n");
@@ -97,9 +99,18 @@ void server_function(void)
 	close(sockfd);
 
 	// TODO: prepare the context now in uctx_func
-	// currently, it just starts the func altogether from the top	
-	swapcontext(&uctx_server, &uctx_func);
+	// currently, it just starts the func altogether from the top
 
+	//if (getcontext(&uctx_func) == -1)
+     	//	error("getcontext");	
+	//uctx_func.uc_stack.ss_sp = initial_func_stack;
+	//uctx_func.uc_stack.ss_size = 16384;
+	//uctx_func.uc_link = &uctx_main;
+	//printf("%d\n", uctx_func_received.uc_stack.ss_sp);
+	//printf("%d\n", uctx_func.uc_stack.ss_sp);
+	//uctx_func.uc_mcontext = uctx_func_received.uc_mcontext;
+	//makecontext(&uctx_func, test, 0);
+	swapcontext(&uctx_server, &uctx_func);
 }
 
 
@@ -146,6 +157,8 @@ void client_function(void)
 	// TODO: what to do with uctx_func??
 	// write the context to the server
 	//n = write(sockfd, &x, sizeof(x));
+	printf("%d", initial_func_stack);
+	printf("%d\n", uctx_func.uc_stack.ss_sp);
 	n = write(sockfd, &uctx_func, sizeof(uctx_func));
 	if (n < 0) 
 		error("ERROR writing to socket");
@@ -178,6 +191,7 @@ void test (void)
 void init (void)
 {
 	char func_stack[16384], server_stack[16384], client_stack[16384];
+	initial_func_stack = func_stack;
 	
 	if (getcontext(&uctx_client) == -1)
 		error("getcontext");
@@ -217,7 +231,6 @@ int main(int argc, char *argv[])
 		printf("Usage: %s remote_hostname mode\n", argv[0]);
 	}
 
-	int client = 1;
 	int server_mode = atoi(argv[2]);
 	remote_hostname = argv[1];
 	int portno = PORT;
