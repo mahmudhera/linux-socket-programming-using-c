@@ -79,11 +79,14 @@ void server_function(void)
 	bzero(buffer,256);
 
 	int x;
+	ucontext_t uctx_func_received;
 
-	// read from client
-	n = read(newsockfd, &x, sizeof(x));
+	// read uctx from client
+	n = read(newsockfd, &uctx_func_received, sizeof(uctx_func_received));
+	// TODO: what to do with this context now??
+	
 	if (n < 0) error("ERROR reading from socket");
-	printf("Here is the message: %d\n", x);
+	printf("Here is the message: BLANK\n");
 
 	// write to the client
 	n = write(newsockfd,"I got your message",18);
@@ -93,7 +96,10 @@ void server_function(void)
 	close(newsockfd);
 	close(sockfd);
 
-	//return NULL;
+	// TODO: prepare the context now in uctx_func
+	// currently, it just starts the func altogether from the top	
+	swapcontext(&uctx_server, &uctx_func);
+
 }
 
 
@@ -137,8 +143,10 @@ void client_function(void)
 	//fgets(buffer,255,stdin);
 	int x = 12345;
 
-	// write it to the server
-	n = write(sockfd, &x, sizeof(x));
+	// TODO: what to do with uctx_func??
+	// write the context to the server
+	//n = write(sockfd, &x, sizeof(x));
+	n = write(sockfd, &uctx_func, sizeof(uctx_func));
 	if (n < 0) 
 		error("ERROR writing to socket");
 	bzero(buffer,256);
@@ -151,6 +159,7 @@ void client_function(void)
 	
 	// close the socket
 	close(sockfd);
+	swapcontext(&uctx_client, &uctx_main);
 
 	//return NULL;
 }
@@ -158,23 +167,11 @@ void client_function(void)
 
 void test (void)
 {
-	//ucontext_t user_context;
-	//int err;
-
 	printf("This is from a thread\n");
 
-
 	swapcontext(&uctx_func, &uctx_client);
-	//err = getcontext(&user_context);
-	//printf("%d\n", err);
-	//if (err) 
-	//{
-	//	error("Error in getting the context\n");
-	//}
-	//fn(user_context);
 
 	printf("This is also from a thread\n");
-	//return NULL;
 }
 
 
@@ -218,12 +215,6 @@ int main(int argc, char *argv[])
 	if (argc < 3) {
 		printf("Not enough arguments.\n");
 		printf("Usage: %s remote_hostname mode\n", argv[0]);
-
-		//pthread_create(&thread_id, NULL, &test, NULL);
-		//pthread_join(thread_id, NULL);
-		//printf("The thread has joined me, I am main\n");
-
-		//return 0;
 	}
 
 	int client = 1;
