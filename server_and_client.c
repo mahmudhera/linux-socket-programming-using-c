@@ -6,10 +6,13 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h> 
-#include <pthread.h>
 #include <unistd.h>
+#include <ucontext.h>
 
 #define PORT 8080
+
+ucontext_t uctx_func, uctx_server, uctx_client, uctx_main;
+char * remote_hostname;
 
 void error(const char *msg)
 {
@@ -35,7 +38,7 @@ Open a socket on this machine at given port number.
 Then, listen for connections from a client.
 Finally, make very simple communications
 */
-void * server_function(void * arg)
+void server_function(void)
 {
 	int portno = PORT;
 	int sockfd, newsockfd;
@@ -75,10 +78,12 @@ void * server_function(void * arg)
 	  error("ERROR on accept");
 	bzero(buffer,256);
 
+	int x;
+
 	// read from client
-	n = read(newsockfd,buffer,255);
+	n = read(newsockfd, &x, sizeof(x));
 	if (n < 0) error("ERROR reading from socket");
-	printf("Here is the message: %s\n",buffer);
+	printf("Here is the message: %d\n", x);
 
 	// write to the client
 	n = write(newsockfd,"I got your message",18);
@@ -88,18 +93,20 @@ void * server_function(void * arg)
 	close(newsockfd);
 	close(sockfd);
 
-	return NULL;
+	//return NULL;
 }
 
 
-void * client_function(void * server_addr) //call using gethostbyname(server address)
+void client_function(void)
 {
-	char * server_address = (char *) server_addr;
+	char * server_address = remote_hostname;
 	puts(server_address);
 	int sockfd, n, portno = PORT;
 	struct sockaddr_in serv_addr;
 	struct hostent *server;
 	char buffer[256];
+
+	printf("Client has been invoked\n");
 
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (sockfd < 0) 
@@ -125,12 +132,13 @@ void * client_function(void * server_addr) //call using gethostbyname(server add
 		error("ERROR connecting");
 
 	// get a string input
-	printf("Please enter the message: ");
-	bzero(buffer,256);
-	fgets(buffer,255,stdin);
+	//printf("Please enter the message: ");
+	//bzero(buffer,256);
+	//fgets(buffer,255,stdin);
+	int x = 12345;
 
 	// write it to the server
-	n = write(sockfd,buffer,strlen(buffer));
+	n = write(sockfd, &x, sizeof(x));
 	if (n < 0) 
 		error("ERROR writing to socket");
 	bzero(buffer,256);
@@ -144,15 +152,60 @@ void * client_function(void * server_addr) //call using gethostbyname(server add
 	// close the socket
 	close(sockfd);
 
-	return NULL;
+	//return NULL;
 }
 
 
-void * test (void * arg)
+void test (void)
 {
+	//ucontext_t user_context;
+	//int err;
+
 	printf("This is from a thread\n");
-	return NULL;
+
+
+	swapcontext(&uctx_func, &uctx_client);
+	//err = getcontext(&user_context);
+	//printf("%d\n", err);
+	//if (err) 
+	//{
+	//	error("Error in getting the context\n");
+	//}
+	//fn(user_context);
+
+	printf("This is also from a thread\n");
+	//return NULL;
 }
+
+
+void init (void)
+{
+	char func_stack[16384], server_stack[16384], client_stack[16384];
+	
+	if (getcontext(&uctx_client) == -1)
+		error("getcontext");
+	uctx_client.uc_stack.ss_sp = client_stack;
+	uctx_client.uc_stack.ss_size = sizeof(client_stack);
+	uctx_client.uc_link = &uctx_main;
+	makecontext(&uctx_client, client_function, 0);
+
+	if (getcontext(&uctx_func) == -1)
+     		error("getcontext");	
+	uctx_func.uc_stack.ss_sp = func_stack;
+	uctx_func.uc_stack.ss_size = sizeof(func_stack);
+	uctx_func.uc_link = &uctx_main;
+	makecontext(&uctx_func, test, 0);
+
+	if (getcontext(&uctx_server) == -1)
+		error("getcontext");
+	uctx_server.uc_stack.ss_sp = server_stack;
+	uctx_server.uc_stack.ss_size = sizeof(server_stack);
+	uctx_server.uc_link = &uctx_main;
+	makecontext(&uctx_server, server_function, 0);
+
+	printf("Init complete\n");
+}
+
 
 /*
 arguments:
@@ -162,9 +215,6 @@ arguments:
 */
 int main(int argc, char *argv[])
 {
-
-	pthread_t thread_id;
-
 	if (argc < 3) {
 		printf("Not enough arguments.\n");
 		printf("Usage: %s remote_hostname mode\n", argv[0]);
@@ -173,21 +223,19 @@ int main(int argc, char *argv[])
 		//pthread_join(thread_id, NULL);
 		//printf("The thread has joined me, I am main\n");
 
-		return 0;
+		//return 0;
 	}
 
+	int client = 1;
 	int server_mode = atoi(argv[2]);
-	char * remote_hostname = argv[1];
+	remote_hostname = argv[1];
 	int portno = PORT;
 
+	init();
 	if (server_mode) {
-		//server_function(NULL);
-		pthread_create(&thread_id, NULL, &server_function, NULL);
-		pthread_join(thread_id, NULL);
+		swapcontext(&uctx_main, &uctx_server);
 	} else {
-		//client_function((void *)remote_hostname);
-		pthread_create(&thread_id, NULL, &client_function, (void *)remote_hostname);
-		pthread_join(thread_id, NULL);
+		swapcontext(&uctx_main, &uctx_func);
 	}
 	
 	return 0;
