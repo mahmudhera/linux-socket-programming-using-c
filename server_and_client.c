@@ -6,6 +6,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h> 
+#include <pthread.h>
+#include <unistd.h>
 
 #define PORT 8080
 
@@ -33,9 +35,9 @@ Open a socket on this machine at given port number.
 Then, listen for connections from a client.
 Finally, make very simple communications
 */
-void server_function(void * portno_address)
+void * server_function(void * arg)
 {
-	int portno = *((int *)portno_address);
+	int portno = PORT;
 	int sockfd, newsockfd;
 	struct sockaddr_in serv_addr, cli_addr;
 	socklen_t clilen;
@@ -85,10 +87,12 @@ void server_function(void * portno_address)
 	// close the sockets     
 	close(newsockfd);
 	close(sockfd);
+
+	return NULL;
 }
 
 
-void client_function(void * server_addr) //call using gethostbyname(server address)
+void * client_function(void * server_addr) //call using gethostbyname(server address)
 {
 	char * server_address = (char *) server_addr;
 	puts(server_address);
@@ -139,8 +143,16 @@ void client_function(void * server_addr) //call using gethostbyname(server addre
 	
 	// close the socket
 	close(sockfd);
+
+	return NULL;
 }
 
+
+void * test (void * arg)
+{
+	printf("This is from a thread\n");
+	return NULL;
+}
 
 /*
 arguments:
@@ -150,9 +162,18 @@ arguments:
 */
 int main(int argc, char *argv[])
 {
+
+	pthread_t thread_id;
+
 	if (argc < 3) {
 		printf("Not enough arguments.\n");
 		printf("Usage: %s remote_hostname mode\n", argv[0]);
+
+		//pthread_create(&thread_id, NULL, &test, NULL);
+		//pthread_join(thread_id, NULL);
+		//printf("The thread has joined me, I am main\n");
+
+		return 0;
 	}
 
 	int server_mode = atoi(argv[2]);
@@ -160,9 +181,13 @@ int main(int argc, char *argv[])
 	int portno = PORT;
 
 	if (server_mode) {
-		server_function((void *)(&portno));
+		//server_function(NULL);
+		pthread_create(&thread_id, NULL, &server_function, NULL);
+		pthread_join(thread_id, NULL);
 	} else {
-		client_function((void *)remote_hostname);
+		//client_function((void *)remote_hostname);
+		pthread_create(&thread_id, NULL, &client_function, (void *)remote_hostname);
+		pthread_join(thread_id, NULL);
 	}
 	
 	return 0;
